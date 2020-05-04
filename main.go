@@ -3,38 +3,42 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/gin-contrib/cors"
-	"github.com/gin-gonic/gin"
-	"github.com/jmoiron/sqlx"
-	_ "github.com/mattn/go-sqlite3"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/gin-contrib/cors"
+	"github.com/gin-gonic/gin"
+	"github.com/jmoiron/sqlx"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 type Config struct {
 	BasePath string `json="BasePath"`
 }
+
 var appConfig Config
-func init(){
+
+func init() {
 	dat, err := ioutil.ReadFile("config.json")
-	if err!=nil {
+	if err != nil {
 		log.Println("can not load config file")
 		log.Println(err)
-		time.Sleep(3*time.Second)
+		time.Sleep(3 * time.Second)
 		panic(err)
 	}
-	err=json.Unmarshal(dat,&appConfig)
-	if err!=nil {
+	err = json.Unmarshal(dat, &appConfig)
+	if err != nil {
 		log.Println("can not parse config file")
 		log.Println(err)
-		time.Sleep(3*time.Second)
+		time.Sleep(3 * time.Second)
 		panic(err)
 	}
 }
+
 type Movie struct {
 	BinId     string `db:"binId"`
 	Id        string `db:"id"`
@@ -42,15 +46,15 @@ type Movie struct {
 	KeyName   string `db:"keyName"`
 	AssetType string `db:"assetType"`
 	SourceId  string `db:"sourceId"`
-	Broken bool `db:_`
+	Broken    bool   `db:_`
 }
 type MovieInfo struct {
 	Movie
-	BinName string
-	ParentName string
-	ParentType string
+	BinName       string
+	ParentName    string
+	ParentType    string
 	ParentBinName string
-	SubMovie []*Movie
+	SubMovie      []*Movie
 }
 
 type Bin struct {
@@ -69,7 +73,7 @@ func main() {
 
 	router := gin.Default()
 	config := cors.DefaultConfig()
-	config.AllowOrigins = []string{"http://google.com","*"}
+	config.AllowOrigins = []string{"http://google.com", "*"}
 	router.Use(cors.New(config))
 	// Query string parameters are parsed using the existing underlying request object.
 	// The request responds to a url matching:  /welcome?firstname=Jane&lastname=Doe
@@ -92,7 +96,7 @@ func main() {
 	})
 	router.GET("/api/movie/:movieId", func(c *gin.Context) {
 		movieId := c.Param("movieId")
-		movie,err:=GetMovie(movieId)
+		movie, err := GetMovie(movieId, false)
 		if err != nil {
 			c.String(http.StatusInternalServerError, "Error %s", err.Error())
 			return
@@ -116,8 +120,8 @@ func main() {
 		}
 		c.JSON(http.StatusAccepted, bins)
 	})
-	router.StaticFS("/static", http.Dir("public/static"))
-	router.StaticFile("/", "./public/index.html")
+	router.StaticFS("/static", http.Dir("www/static"))
+	router.StaticFile("/", "./www/index.html")
 	router.Run(":8080")
 }
 
@@ -175,7 +179,7 @@ func GetBinMovies(binId string) ([]*MovieInfo, error) {
 	}
 	var movies []string
 	var bin Bin
-	err=db.Get(&bin,fmt.Sprintf("select binId,binName from MovieGroup where binId='%s'",binId))
+	err = db.Get(&bin, fmt.Sprintf("select binId,binName from MovieGroup where binId='%s'", binId))
 	if err != nil {
 		log.Println(err)
 		return nil, err
@@ -186,14 +190,14 @@ func GetBinMovies(binId string) ([]*MovieInfo, error) {
 		log.Println(err)
 		return nil, err
 	}
-	info:=make([]*MovieInfo,0)
-	for _,mov:=range movies {
-		mf,err:=GetMovie(mov)
+	info := make([]*MovieInfo, 0)
+	for _, mov := range movies {
+		mf, err := GetMovie(mov, false)
 		if err != nil {
 			log.Println(err)
 			return nil, err
 		}
-		info=append(info,mf)
+		info = append(info, mf)
 	}
 	return info, err
 }
@@ -245,7 +249,7 @@ func ListTables() ([]string, error) {
 	return tables, err
 }
 
-func GetMovie(movieId string) (*MovieInfo, error) {
+func GetMovie(movieId string, isLoped bool) (*MovieInfo, error) {
 	db, err := sqlx.Connect("sqlite3", "media.db")
 	if err != nil {
 		log.Println(err)
@@ -258,53 +262,71 @@ func GetMovie(movieId string) (*MovieInfo, error) {
 		log.Println(err)
 		return nil, err
 	}
-	binId:=mov.BinId
+	binId := mov.BinId
 	var bin Bin
-	err=db.Get(&bin,fmt.Sprintf("select binId,binName from MovieGroup where binId='%s'",binId))
+	err = db.Get(&bin, fmt.Sprintf("select binId,binName from MovieGroup where binId='%s'", binId))
 	if err != nil {
 		log.Println(err)
 		return nil, err
 	}
-	pth:=appConfig.BasePath+"/"+strings.TrimSpace(bin.BinName)+"/"+strings.TrimSpace(mov.Name)
-	_,err=os.Stat(pth)
+	pth := appConfig.BasePath + "/" + strings.TrimSpace(bin.BinName) + "/" + strings.TrimSpace(mov.Name)
+	_, err = os.Stat(pth)
 	if os.IsNotExist(err) {
-		mov.Broken=true
+		mov.Broken = true
 	}
 	var info MovieInfo
-	info.Movie=mov
-	info.BinName=bin.BinName
-	if info.AssetType=="SubClip"{
-		refId,err:=GetAssetRefs(info.Id)
+	info.Movie = mov
+	info.BinName = bin.BinName
+	if info.AssetType == "SubClip" {
+		refId, err := GetAssetRefs(info.Id)
 		if err != nil {
 			log.Println(err)
 			return nil, err
 		}
-		if len(refId)==1{
-			pInfo,err:=GetMovie(refId[0])
+		if len(refId) == 1 {
+			pInfo, err := GetMovie(refId[0], true)
 			if err != nil {
 				log.Println(err)
 				return nil, err
 			}
-			info.ParentName=pInfo.Name
-			info.ParentType=pInfo.AssetType
-			info.ParentBinName=pInfo.BinName
-			if pInfo.Broken{
-				info.Broken=pInfo.Broken
+			info.ParentName = pInfo.Name
+			info.ParentType = pInfo.AssetType
+			info.ParentBinName = pInfo.BinName
+			if pInfo.Broken {
+				info.Broken = pInfo.Broken
 			}
 		}
 	}
-	if info.AssetType=="List"{
-		assets,err:=GetAssetRefs(info.Id)
+	if info.AssetType == "List" && !isLoped {
+		assets, err := GetAssetRefs(info.Id)
 		if err != nil {
 			log.Println(err)
 			return nil, err
 		}
-		if assets!=nil {
-			info.SubMovie=make([]*Movie,0)
-			for _,ass:=range assets{
-				mif,err:=GetMovie(ass)
-				if err==nil {
-					info.SubMovie=append(info.SubMovie,&mif.Movie)
+		if assets != nil {
+			info.SubMovie = make([]*Movie, 0)
+			for _, ass := range assets {
+				mif, err := GetMovie(ass, true)
+				if err == nil {
+					info.SubMovie = append(info.SubMovie, &mif.Movie)
+				}
+			}
+		}
+
+	}
+
+	if info.AssetType == "Clip" && !isLoped {
+		assets, err := GetRefAssets(info.Id)
+		if err != nil {
+			log.Println(err)
+			return nil, err
+		}
+		if assets != nil {
+			info.SubMovie = make([]*Movie, 0)
+			for _, ass := range assets {
+				mif, err := GetMovie(ass, true)
+				if err == nil {
+					info.SubMovie = append(info.SubMovie, &mif.Movie)
 				}
 			}
 		}
@@ -312,3 +334,91 @@ func GetMovie(movieId string) (*MovieInfo, error) {
 	}
 	return &info, nil
 }
+
+/*
+func DeleteMovie(movieId string) (bool, error) {
+	db, err := sqlx.Connect("sqlite3", "media.db")
+	if err != nil {
+		log.Println(err)
+		return false, err
+	}
+	var mov Movie
+	quer := fmt.Sprintf("select binId,id,name,assetType,sourceId from Movie where Id='%s'", movieId)
+	err = db.Get(&mov, quer)
+	if err != nil {
+		log.Println(err)
+		return false, err
+	}
+	binId := mov.BinId
+	var bin Bin
+	err = db.Get(&bin, fmt.Sprintf("select binId,binName from MovieGroup where binId='%s'", binId))
+	if err != nil {
+		log.Println(err)
+		return false, err
+	}
+	pth := appConfig.BasePath + "/" + strings.TrimSpace(bin.BinName) + "/" + strings.TrimSpace(mov.Name)
+	_, err = os.Stat(pth)
+	if os.IsNotExist(err) {
+		mov.Broken = true
+	}
+	var info MovieInfo
+	info.Movie = mov
+	info.BinName = bin.BinName
+	if info.AssetType == "SubClip" {
+		refId, err := GetAssetRefs(info.Id)
+		if err != nil {
+			log.Println(err)
+			return nil, err
+		}
+		if len(refId) == 1 {
+			pInfo, err := GetMovie(refId[0], true)
+			if err != nil {
+				log.Println(err)
+				return nil, err
+			}
+			info.ParentName = pInfo.Name
+			info.ParentType = pInfo.AssetType
+			info.ParentBinName = pInfo.BinName
+			if pInfo.Broken {
+				info.Broken = pInfo.Broken
+			}
+		}
+	}
+	if info.AssetType == "List" && !isLoped {
+		assets, err := GetAssetRefs(info.Id)
+		if err != nil {
+			log.Println(err)
+			return nil, err
+		}
+		if assets != nil {
+			info.SubMovie = make([]*Movie, 0)
+			for _, ass := range assets {
+				mif, err := GetMovie(ass, true)
+				if err == nil {
+					info.SubMovie = append(info.SubMovie, &mif.Movie)
+				}
+			}
+		}
+
+	}
+
+	if info.AssetType == "Clip" && !isLoped {
+		assets, err := GetRefAssets(info.Id)
+		if err != nil {
+			log.Println(err)
+			return nil, err
+		}
+		if assets != nil {
+			info.SubMovie = make([]*Movie, 0)
+			for _, ass := range assets {
+				mif, err := GetMovie(ass, true)
+				if err == nil {
+					info.SubMovie = append(info.SubMovie, &mif.Movie)
+				}
+			}
+		}
+
+	}
+	return &info, nil
+}
+*/

@@ -23,7 +23,7 @@ export default function Table({rows,cols,title,onRowClick,style,rowStyleMap}) {
                 <tr>
                     {
                         (cc||[]).map((c,cid)=>{
-                            return <td style={{'background-color':'hsl(248, 53%, 58%)','color':'white'}} key={cid}>{c.display||c.title||c}</td>
+                            return <td  key={cid}>{c.display||c.title||c}</td>
                         })
                     }
                 </tr>
@@ -50,7 +50,7 @@ export default function Table({rows,cols,title,onRowClick,style,rowStyleMap}) {
                                 if(typeof c.styleMap=="function"){
                                     tStyle=c.styleMap(r[f],r)
                                 }
-                                return <td style={tStyle} key={cid+""+id}>{val}</td>
+                                return <td  key={cid+""+id}>{val}</td>
                             })
                         }
                     </tr>)
